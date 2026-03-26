@@ -93,6 +93,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard !Settings.apiKey.isEmpty else {
             log.warning("No API key set")
             statusBar.setState(.error)
+            SoundPlayer.play(Settings.soundError)
             return
         }
 
@@ -123,7 +124,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if result.duration < Settings.minRecordingSeconds {
             log.info("Recording too short (\(String(format: "%.1f", result.duration))s), discarding")
             audioRecorder.cleanup()
-            statusBar.setState(.idle)
+            statusBar.setState(.error)
+            SoundPlayer.play(Settings.soundError)
             return
         }
 

@@ -23,11 +23,11 @@ final class StatusBarController {
 
     // Animation constants (matching Python)
     private let animFPS: TimeInterval = 60
-    private let breathPeriod: TimeInterval = 0.35
+    private let breathPeriod: TimeInterval = 0.675
     private let jumpPeriod: TimeInterval = 0.5
     private let maxJump: CGFloat = 2.5
-    private let scaleMin: CGFloat = 0.6
-    private let scaleMax: CGFloat = 1.35
+    private let opacityMin: CGFloat = 0.5
+    private let opacityMax: CGFloat = 1.0
     private let successDuration: TimeInterval = 1.5
     private let errorDuration: TimeInterval = 2.0
     private let permCheckInterval = 300  // ticks (~5s at 60fps)
@@ -79,6 +79,17 @@ final class StatusBarController {
         versionItem.isEnabled = false
         menu.addItem(versionItem)
 
+        let hintItem = NSMenuItem(title: "Hold right ⌥ to record", action: nil, keyEquivalent: "")
+        hintItem.isEnabled = false
+        hintItem.attributedTitle = {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+            return NSAttributedString(string: "Hold right ⌥ to record", attributes: attrs)
+        }()
+        menu.addItem(hintItem)
+
         menu.addItem(.separator())
 
         accessibilityItem = NSMenuItem(title: "    Accessibility", action: #selector(onPermClick(_:)), keyEquivalent: "")
@@ -111,6 +122,10 @@ final class StatusBarController {
         restartItem.target = self
         menu.addItem(restartItem)
 
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(onClickQuit), keyEquivalent: "")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
         refreshPermissions()
     }
 
@@ -138,30 +153,49 @@ final class StatusBarController {
         DispatchQueue.main.async { [weak self] in self?.showAPIKeyAlert() }
     }
 
-    private func showAPIKeyAlert() {
+    private func showAPIKeyAlert(prefill: String? = nil, errorMessage: String? = nil) {
         NSApp.activate(ignoringOtherApps: true)
 
         let alert = NSAlert()
         alert.messageText = "Enter OpenAI API Key"
-        alert.informativeText = "Your API key is stored locally and used only for Whisper transcription."
+        if let err = errorMessage {
+            alert.informativeText = "⚠️ \(err)"
+        } else {
+            alert.informativeText = "Your API key is stored locally and used only for Whisper transcription."
+        }
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        // Native multiline NSTextField — gets rounded bezel automatically
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 64))
+        textField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         textField.placeholderString = "sk-..."
-        if !Settings.apiKey.isEmpty {
-            textField.stringValue = Settings.apiKey
-        }
-        alert.accessoryView = textField
-        alert.window.initialFirstResponder = textField
+        textField.isEditable = true
+        textField.isSelectable = true
+        textField.usesSingleLineMode = false
+        textField.cell?.wraps = true
+        textField.cell?.isScrollable = false
+        let currentKey = prefill ?? (Settings.apiKey.isEmpty ? "" : Settings.apiKey)
+        textField.stringValue = currentKey
 
-        if alert.runModal() == .alertFirstButtonReturn {
-            let key = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !key.isEmpty {
-                onAPIKeyEntered?(key)
-                refreshPermissions()
-            }
+        alert.accessoryView = textField
+        alert.layout()
+        alert.window.initialFirstResponder = textField
+        alert.window.makeFirstResponder(textField)
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let key = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+
+        // Validate OpenAI key format
+        guard key.hasPrefix("sk-") else {
+            showAPIKeyAlert(prefill: key, errorMessage: "Invalid key format. OpenAI keys must start with 'sk-'.")
+            return
         }
+
+        onAPIKeyEntered?(key)
+        refreshPermissions()
     }
 
     @objc private func onToggleAutoSubmit(_ sender: NSMenuItem) {
@@ -176,6 +210,10 @@ final class StatusBarController {
 
     @objc private func onClickRestart() {
         onRestart?()
+    }
+
+    @objc private func onClickQuit() {
+        NSApplication.shared.terminate(nil)
     }
 
     // MARK: - Animation
@@ -202,17 +240,26 @@ final class StatusBarController {
         let image: NSImage
         switch state {
         case .idle:
+            statusItem.button?.alphaValue = 1.0
+            statusItem.button?.contentTintColor = nil
             image = IconDrawer.idle()
         case .recording:
             let phase = 0.5 + 0.5 * sin(animTime / breathPeriod * 2 * .pi)
-            let scale = scaleMin + (scaleMax - scaleMin) * CGFloat(phase)
-            image = IconDrawer.recording(scale: scale)
+            let opacity = opacityMin + (opacityMax - opacityMin) * CGFloat(phase)
+            statusItem.button?.alphaValue = opacity
+            image = IconDrawer.recording(scale: 1.0)
         case .processing:
+            statusItem.button?.alphaValue = 1.0
+            statusItem.button?.contentTintColor = nil
             let offsetY = abs(sin(animTime / jumpPeriod * .pi)) * maxJump
             image = IconDrawer.processing(offsetY: offsetY)
         case .success:
+            statusItem.button?.alphaValue = 1.0
+            statusItem.button?.contentTintColor = nil
             image = IconDrawer.success()
         case .error:
+            statusItem.button?.alphaValue = 1.0
+            statusItem.button?.contentTintColor = nil
             image = IconDrawer.error()
         }
         statusItem.button?.image = image
