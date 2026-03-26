@@ -38,6 +38,7 @@ final class StatusBarController {
     private var microphoneItem: NSMenuItem!
     private var apiKeyItem: NSMenuItem!
     private var removeApiKeyItem: NSMenuItem!
+    private var autoSubmitItem: NSMenuItem!
 
     // Callbacks
     var onAPIKeyEntered: ((String) -> Void)?
@@ -96,9 +97,8 @@ final class StatusBarController {
 
         menu.addItem(.separator())
 
-        let autoSubmitItem = NSMenuItem(title: "Auto-submit (Enter)", action: #selector(onToggleAutoSubmit(_:)), keyEquivalent: "")
+        autoSubmitItem = NSMenuItem(title: "", action: #selector(onToggleAutoSubmit(_:)), keyEquivalent: "")
         autoSubmitItem.target = self
-        autoSubmitItem.state = Settings.autoSubmit ? .on : .off
         menu.addItem(autoSubmitItem)
 
         menu.addItem(.separator())
@@ -122,6 +122,7 @@ final class StatusBarController {
         accessibilityItem.title = "\(accOK ? "✓" : "  ")  Accessibility"
         microphoneItem.title = "\(micOK ? "✓" : "  ")  Microphone"
         apiKeyItem.title = "\(apiOK ? "✓" : "  ")  API Key"
+        autoSubmitItem.title = "\(Settings.autoSubmit ? "✓" : "  ")  Auto-submit (Enter)"
         removeApiKeyItem.isEnabled = apiOK
     }
 
@@ -165,7 +166,7 @@ final class StatusBarController {
 
     @objc private func onToggleAutoSubmit(_ sender: NSMenuItem) {
         Settings.autoSubmit.toggle()
-        sender.state = Settings.autoSubmit ? .on : .off
+        refreshPermissions()
     }
 
     @objc private func onClickRemoveAPIKey() {
