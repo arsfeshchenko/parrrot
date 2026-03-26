@@ -6,6 +6,13 @@ private let log = Logger(subsystem: "com.arsfeshchenko.parrrot", category: "Sett
 
 private let keychainService = "com.arsfeshchenko.parrrot"
 
+private var apiKeyFileURL: URL {
+    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let dir = support.appendingPathComponent("com.arsfeshchenko.parrrot", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("apikey")
+}
+
 @propertyWrapper
 struct Setting<T> {
     let key: String
@@ -20,50 +27,19 @@ struct Setting<T> {
 enum Settings {
     static var apiKey: String {
         get {
-            let query: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: keychainService,
-                kSecAttrAccount: "apiKey",
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
-                kSecUseDataProtectionKeychain: true
-            ]
-            var result: AnyObject?
-            let status = SecItemCopyMatching(query as CFDictionary, &result)
-            guard status == errSecSuccess,
-                  let data = result as? Data,
-                  let string = String(data: data, encoding: .utf8) else { return "" }
-            return string
+            (try? String(contentsOf: apiKeyFileURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
         set {
-            // Delete from both old (ACL-based) and new (data protection) keychain
-            let deleteQuery: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: keychainService,
-                kSecAttrAccount: "apiKey"
-            ]
+            if newValue.isEmpty {
+                try? FileManager.default.removeItem(at: apiKeyFileURL)
+            } else {
+                try? newValue.write(to: apiKeyFileURL, atomically: true, encoding: .utf8)
+            }
+            // Clean up any old keychain items
+            let deleteQuery: [CFString: Any] = [kSecClass: kSecClassGenericPassword,
+                                                kSecAttrService: keychainService,
+                                                kSecAttrAccount: "apiKey"]
             SecItemDelete(deleteQuery as CFDictionary)
-            let deleteQueryDP: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: keychainService,
-                kSecAttrAccount: "apiKey",
-                kSecUseDataProtectionKeychain: true
-            ]
-            SecItemDelete(deleteQueryDP as CFDictionary)
-
-            if newValue.isEmpty { return }
-            guard let data = newValue.data(using: .utf8) else { return }
-
-            // Use data protection keychain — no ACL, no binary-hash binding, survives rebuilds
-            let addQuery: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: keychainService,
-                kSecAttrAccount: "apiKey",
-                kSecValueData: data,
-                kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock,
-                kSecUseDataProtectionKeychain: true
-            ]
-            SecItemAdd(addQuery as CFDictionary, nil)
         }
     }
 
