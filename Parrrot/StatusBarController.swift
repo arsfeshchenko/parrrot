@@ -83,7 +83,12 @@ final class StatusBarController {
                 .font: NSFont.menuBarFont(ofSize: 0),
                 .paragraphStyle: para
             ])
-            let subtitle = NSAttributedString(string: "\(version) · \(buildTime)", attributes: [
+            #if DEBUG
+            let versionPrefix = "dev · "
+            #else
+            let versionPrefix = ""
+            #endif
+            let subtitle = NSAttributedString(string: "\(versionPrefix)\(version) · \(buildTime)", attributes: [
                 .font: NSFont.systemFont(ofSize: 10),
                 .foregroundColor: NSColor.secondaryLabelColor
             ])
@@ -128,6 +133,10 @@ final class StatusBarController {
         menu.addItem(autoSubmitItem)
 
         menu.addItem(.separator())
+
+        let listenItem = NSMenuItem(title: "♪  Listen to Masterpiece", action: #selector(onClickListen), keyEquivalent: "")
+        listenItem.target = self
+        menu.addItem(listenItem)
 
         removeApiKeyItem = NSMenuItem(title: "Remove API key", action: #selector(onClickRemoveAPIKey), keyEquivalent: "")
         removeApiKeyItem.target = self
@@ -221,6 +230,10 @@ final class StatusBarController {
     @objc private func onClickRemoveAPIKey() {
         onRemoveAPIKey?()
         refreshPermissions()
+    }
+
+    @objc private func onClickListen() {
+        NSWorkspace.shared.open(URL(string: "https://youtube.com/shorts/WkRH_4wJbhw?si=Lb0LnlyNzJfTMKMp")!)
     }
 
     @objc private func onClickRestart() {
