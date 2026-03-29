@@ -72,25 +72,29 @@ final class StatusBarController {
 
     private func buildMenu() {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        let buildTime = buildTimestamp()
         versionItem = NSMenuItem(title: "CarelessWhisper", action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         versionItem.attributedTitle = {
+            #if DEBUG
+            let buildTime = buildTimestamp()
+            let titleStr = "CarelessWhisper Dev\n"
+            let subtitleStr = "dev · \(version) · \(buildTime)"
+            #else
+            let titleStr = "CarelessWhisper (\(version))\n"
+            let subtitleStr = ""
+            #endif
             let para = NSMutableParagraphStyle()
-            let title = NSMutableAttributedString(string: "CarelessWhisper\n", attributes: [
+            let title = NSMutableAttributedString(string: titleStr, attributes: [
                 .font: NSFont.menuBarFont(ofSize: 0),
                 .paragraphStyle: para
             ])
-            #if DEBUG
-            let versionPrefix = "dev · "
-            #else
-            let versionPrefix = ""
-            #endif
-            let subtitle = NSAttributedString(string: "\(versionPrefix)\(version) · \(buildTime)", attributes: [
-                .font: NSFont.systemFont(ofSize: 10),
-                .foregroundColor: NSColor.secondaryLabelColor
-            ])
-            title.append(subtitle)
+            if !subtitleStr.isEmpty {
+                let subtitle = NSAttributedString(string: subtitleStr, attributes: [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ])
+                title.append(subtitle)
+            }
             return title
         }()
         menu.addItem(versionItem)
