@@ -44,10 +44,12 @@ final class StatusBarController {
     var onRestart: (() -> Void)?
     var onAccessibilityGranted: (() -> Void)?
 
-    private var wasAccessibilityGranted = false
+    private var wasAccessibilityGranted: Bool
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // Snapshot current state so we don't fire onAccessibilityGranted before callbacks are wired
+        wasAccessibilityGranted = PermissionChecker.isAccessibilityGranted()
         buildMenu()
         statusItem.menu = menu
         updateIcon()

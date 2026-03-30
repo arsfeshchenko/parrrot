@@ -16,6 +16,9 @@ final class HotkeyListener {
     // Right Option key code = 61
     private let rightOptionKeyCode: UInt16 = 61
 
+    private var retryCount = 0
+    private let maxRetries = 5
+
     func start() {
         let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
@@ -32,10 +35,20 @@ final class HotkeyListener {
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            log.error("Failed to create event tap. Check Accessibility permissions.")
+            retryCount += 1
+            if retryCount <= maxRetries {
+                let delay = Double(retryCount) * 1.0
+                log.warning("Event tap creation failed, retrying in \(delay)s (\(self.retryCount)/\(self.maxRetries))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.start()
+                }
+            } else {
+                log.error("Failed to create event tap after \(self.maxRetries) retries. Check Accessibility permissions.")
+            }
             return
         }
 
+        retryCount = 0
         self.eventTap = tap
         self.runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
