@@ -19,6 +19,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var consecutiveAudioFailures = 0
     private var onboarding: OnboardingWindow?
     private var startSoundTimer: Timer?
+    private var doubleClickSoundTimer: Timer?
+    private var didPlayStartSound = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -193,11 +195,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try audioRecorder.start()
             statusBar.setState(.recording)
             startMaxRecordingTimer()
-            // Delay sound by 400ms so we know if it's a double-click-and-hold
-            SoundPlayer.play(Settings.soundStart)
-            // After 400ms, if it turned out to be a double-click-and-hold, play Funk too
+            // Hold the start sound until the press clears the misclick
+            // threshold, so a tap that won't be transcribed stays completely
+            // silent. A sound can't be un-played, so it must be delayed rather
+            // than retracted. Same threshold as the transcription cutoff below,
+            // so sound and transcription always agree.
+            didPlayStartSound = false
             startSoundTimer?.invalidate()
-            startSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
+            startSoundTimer = Timer.scheduledTimer(withTimeInterval: Settings.minRecordingSeconds, repeats: false) { [weak self] _ in
+                guard let self, self.audioRecorder.isRecording else { return }
+                SoundPlayer.play(Settings.soundStart)
+                self.didPlayStartSound = true
+            }
+
+            // After 400ms, if it turned out to be a double-click-and-hold, play Funk too
+            doubleClickSoundTimer?.invalidate()
+            doubleClickSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
                 guard let self, self.audioRecorder.isRecording, self.hotkeyListener.isDoubleClickHold else { return }
                 SoundPlayer.play("Funk")
             }
@@ -216,15 +229,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let shiftHeld = CGEventSource.flagsState(.combinedSessionState).contains(.maskShift)
         let doubleClickHold = hotkeyListener.isDoubleClickHold
 
-        startSoundTimer?.invalidate()
-        startSoundTimer = nil
+        cancelPressSounds()
         cancelMaxRecordingTimer()
         guard let result = audioRecorder.stop() else {
             statusBar.setState(.idle)
             return
         }
 
-        SoundPlayer.play(Settings.soundStop)
+        // Pair a stop sound only with a start sound that actually played, so a
+        // misclick makes no noise at either end.
+        if didPlayStartSound {
+            SoundPlayer.play(Settings.soundStop)
+        }
+        didPlayStartSound = false
 
         if result.duration < Settings.minRecordingSeconds {
             log.info("Recording too short (\(String(format: "%.1f", result.duration))s), ignoring")
@@ -237,13 +254,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func onHotkeyCancel() {
-        startSoundTimer?.invalidate()
-        startSoundTimer = nil
+        cancelPressSounds()
         cancelMaxRecordingTimer()
         audioRecorder.cancel()
         statusBar.setState(.idle)
-        SoundPlayer.play(Settings.soundStop)
+        if didPlayStartSound {
+            SoundPlayer.play(Settings.soundStop)
+        }
+        didPlayStartSound = false
         log.info("Recording cancelled")
+    }
+
+    /// Cancels both pending press sounds: the delayed start chime and the
+    /// double-click-and-hold Funk.
+    private func cancelPressSounds() {
+        startSoundTimer?.invalidate()
+        startSoundTimer = nil
+        doubleClickSoundTimer?.invalidate()
+        doubleClickSoundTimer = nil
     }
 
     private func processRecording(url: URL, suppressAutoSubmit: Bool = false, skipTranslation: Bool = false) {

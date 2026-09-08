@@ -61,7 +61,11 @@ enum Settings {
     @Setting(key: "autoSubmit", defaultValue: true)
     static var autoSubmit: Bool
 
-    @Setting(key: "minRecordingSeconds", defaultValue: 0.5)
+    /// The single misclick threshold. A press shorter than this is ignored
+    /// completely: no start/stop sound and no transcription. The sound delay is
+    /// derived from this value so the two can never drift apart and create a
+    /// window where the app chimes but transcribes nothing.
+    @Setting(key: "minRecordingSeconds", defaultValue: 0.3)
     static var minRecordingSeconds: Double
 
     @Setting(key: "maxRecordingSeconds", defaultValue: 600.0)
